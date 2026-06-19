@@ -1,0 +1,172 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 1. Global Default-Deny Catch-All Security Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reuseable global functions and primitives
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+    function isNum(val) {
+      return val is int || val is float;
+    }
+
+    // --- Entity Validations ---
+    function isValidUserProfile(data) {
+      return data.userId is string && data.userId == request.auth.uid &&
+             data.email is string && data.email.size() <= 254 &&
+             data.points is int && data.points >= 0 &&
+             isNum(data.currentFootprint) &&
+             data.hasOnboarded is bool;
+    }
+
+    function isValidFootprintLog(data) {
+      return data.logId is string && data.logId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.category is string && (data.category == 'transport' || data.category == 'energy' || data.category == 'food' || data.category == 'waste') &&
+             isNum(data.co2e) && data.co2e >= 0;
+    }
+
+    function isValidChatSession(data) {
+      return data.sessionId is string && data.sessionId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.title is string && data.title.size() <= 200;
+    }
+
+    function isValidChatMessage(data) {
+      return data.messageId is string && data.messageId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.role is string && (data.role == 'user' || data.role == 'model') &&
+             data.content is string && data.content.size() <= 10000;
+    }
+
+    function isValidFamilyGroup(data) {
+      return data.groupId is string && data.groupId.size() <= 128 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.ownerId is string &&
+             data.memberIds is list && data.memberIds.size() <= 20 &&
+             data.inviteCode is string && data.inviteCode.size() <= 20;
+    }
+
+    function isValidReceiptScan(data) {
+      return data.scanId is string && data.scanId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             isNum(data.estimatedCO2);
+    }
+
+    // --- Path Rules ---
+
+    // USERS COLLECTION
+    match /users/{userId} {
+      allow get: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUserProfile(incoming());
+      allow update: if isOwner(userId) && isValidUserProfile(incoming()) && 
+                    incoming().email == existing().email && 
+                    incoming().userId == existing().userId;
+      allow delete: if false; // Profiles cannot be deleted over client SDK
+
+      // Subcollection: Footprint Logs
+      match /footprint_logs/{logId} {
+        allow get: if isOwner(userId) && isValidId(logId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(logId) && isValidFootprintLog(incoming());
+        allow update: if isOwner(userId) && isValidId(logId) && isValidFootprintLog(incoming()) && 
+                      incoming().logId == existing().logId && 
+                      incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(logId);
+      }
+
+      // Subcollection: Chat Sessions
+      match /chats/{chatId} {
+        allow get: if isOwner(userId) && isValidId(chatId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(chatId) && isValidChatSession(incoming());
+        allow update: if isOwner(userId) && isValidId(chatId) && isValidChatSession(incoming()) &&
+                      incoming().sessionId == existing().sessionId &&
+                      incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(chatId);
+
+        // Nested subcollection: Chat Messages
+        match /messages/{messageId} {
+          allow get: if isOwner(userId) && isValidId(messageId);
+          allow list: if isOwner(userId);
+          allow create: if isOwner(userId) && isValidId(messageId) && isValidChatMessage(incoming());
+          allow update: if false; // Messages are immutable
+          allow delete: if false;
+        }
+      }
+
+      // Subcollection: Receipts
+      match /receipts/{receiptId} {
+        allow get: if isOwner(userId) && isValidId(receiptId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(receiptId) && isValidReceiptScan(incoming());
+        allow update: if false; // Scanning matches are immutable
+        allow delete: if isOwner(userId) && isValidId(receiptId);
+      }
+    }
+
+    // FAMILY GROUPS
+    match /family_groups/{groupId} {
+      allow get: if isSignedIn() && isValidId(groupId); // Allow lookup to join
+      allow list: if isSignedIn() && (resource.data.ownerId == request.auth.uid || request.auth.uid in resource.data.memberIds);
+      allow create: if isSignedIn() && isValidId(groupId) && isValidFamilyGroup(incoming()) && incoming().ownerId == request.auth.uid;
+      allow update: if isSignedIn() && isValidId(groupId) && isValidFamilyGroup(incoming()) && 
+                    incoming().ownerId == existing().ownerId &&
+                    (
+                      // Case A: Owner of the group can modify group details
+                      request.auth.uid == existing().ownerId ||
+                      
+                      // Case B: A new member is joining the group (appending their ownUID)
+                      (
+                        ! (request.auth.uid in existing().memberIds) &&
+                        request.auth.uid in incoming().memberIds &&
+                        incoming().memberIds.size() == existing().memberIds.size() + 1 &&
+                        incoming().name == existing().name &&
+                        incoming().inviteCode == existing().inviteCode
+                      ) ||
+                      
+                      // Case C: An existing member is leaving the group (removing their own UID)
+                      (
+                        request.auth.uid in existing().memberIds &&
+                        ! (request.auth.uid in incoming().memberIds) &&
+                        incoming().memberIds.size() == existing().memberIds.size() - 1 &&
+                        incoming().name == existing().name &&
+                        incoming().inviteCode == existing().inviteCode
+                      )
+                    );
+      allow delete: if isSignedIn() && isValidId(groupId) && request.auth.uid == existing().ownerId;
+    }
+
+    // PUBLIC CHALLENGES (System populated, client read-only)
+    match /challenges/{challengeId} {
+      allow get: if isSignedIn() && isValidId(challengeId);
+      allow list: if isSignedIn();
+      allow create, update, delete: if false; // Only manageable through Firebase console or backend
+
+      // Subcollection: completions
+      match /completions/{userId} {
+        allow get: if isSignedIn() && request.auth.uid == userId;
+        allow list: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId && incoming().userId == request.auth.uid;
+        allow update, delete: if false; // completions are immutable history logs
+      }
+    }
+  }
+}

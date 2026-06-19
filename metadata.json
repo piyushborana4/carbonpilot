@@ -1,0 +1,10 @@
+{
+  "name": "Remix: CarbonPilot AI",
+  "description": "An AI-powered carbon tracker, eco-route planner, and personalized climate coaching pilot designed to help track, calculate, predict, and lower environmental footprints.",
+  "requestFramePermissions": [
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

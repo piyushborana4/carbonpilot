@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User sustainability profile and settings",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The unique user ID matching Auth UID" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "points": { "type": "integer" },
+        "currentFootprint": { "type": "number", "description": "Current calculated annual carbon footprint in metric tons" },
+        "hasOnboarded": { "type": "boolean" },
+        "theme": { "type": "string", "enum": ["light", "dark"] },
+        "language": { "type": "string", "enum": ["en", "es", "fr"] },
+        "familyGroupId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "points", "currentFootprint", "hasOnboarded"]
+    },
+    "FootprintLog": {
+      "title": "FootprintLog",
+      "description": "Log of a specific carbon emission activity",
+      "type": "object",
+      "properties": {
+        "logId": { "type": "string" },
+        "userId": { "type": "string" },
+        "category": { "type": "string", "enum": ["transport", "energy", "food", "waste"] },
+        "subCategory": { "type": "string" },
+        "co2e": { "type": "number", "description": "Carbon emissions in kg of CO2e" },
+        "amount": { "type": "number" },
+        "unit": { "type": "string" },
+        "note": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["logId", "userId", "category", "co2e", "timestamp"]
+    },
+    "ChatSession": {
+      "title": "ChatSession",
+      "description": "A conversation with the AI Climate Coach",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sessionId", "userId", "title", "createdAt", "updatedAt"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "A single message within a Climate Coach chat session",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "model"] },
+        "content": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["messageId", "userId", "role", "content", "timestamp"]
+    },
+    "FamilyGroup": {
+      "title": "FamilyGroup",
+      "description": "A shared family or household dashboard group",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "name": { "type": "string" },
+        "ownerId": { "type": "string" },
+        "memberIds": { "type": "array" },
+        "inviteCode": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "name", "ownerId", "memberIds", "inviteCode", "createdAt"]
+    },
+    "SustainabilityChallenge": {
+      "title": "SustainabilityChallenge",
+      "description": "A weekly sustainability task or challenge",
+      "type": "object",
+      "properties": {
+        "challengeId": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "co2eSaved": { "type": "number", "description": "Estimated kg of CO2e saved by completing this" },
+        "pointsValue": { "type": "integer" }
+      },
+      "required": ["challengeId", "title", "description", "co2eSaved", "pointsValue"]
+    },
+    "ChallengeCompletion": {
+      "title": "ChallengeCompletion",
+      "description": "Record of a user completing a weekly challenge",
+      "type": "object",
+      "properties": {
+        "completionId": { "type": "string" },
+        "challengeId": { "type": "string" },
+        "userId": { "type": "string" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["completionId", "challengeId", "userId", "completedAt"]
+    },
+    "ReceiptScan": {
+      "title": "ReceiptScan",
+      "description": "Record of a receipt analyzed for carbon impact Estimation",
+      "type": "object",
+      "properties": {
+        "scanId": { "type": "string" },
+        "userId": { "type": "string" },
+        "rawText": { "type": "string" },
+        "estimatedCO2": { "type": "number" },
+        "detectedItems": { "type": "array" },
+        "notes": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["scanId", "userId", "estimatedCO2", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Stores user preferences and total carbon data"
+    },
+    "users/{userId}/footprint_logs/{logId}": {
+      "schema": "FootprintLog",
+      "description": "Carbon footprint log details for individual users"
+    },
+    "users/{userId}/chats/{chatId}": {
+      "schema": "ChatSession",
+      "description": "Coach chats list"
+    },
+    "users/{userId}/chats/{chatId}/messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Context and back-and-forth communication history with Coach"
+    },
+    "users/{userId}/receipts/{receiptId}": {
+      "schema": "ReceiptScan",
+      "description": "Scanned carbon receipts"
+    },
+    "family_groups/{groupId}": {
+      "schema": "FamilyGroup",
+      "description": "High-level family group data sharing dashboard summary and membership list"
+    },
+    "challenges/{challengeId}": {
+      "schema": "SustainabilityChallenge",
+      "description": "Master list of ecological active weekly challenges"
+    },
+    "challenges/{challengeId}/completions/{userId}": {
+      "schema": "ChallengeCompletion",
+      "description": "List of users who completed this challenge"
+    }
+  }
+}

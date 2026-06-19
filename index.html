@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Google AI Studio App</title>
+    <script>
+      (function() {
+        // Intercept both console.error and uncaught window errors for Google Maps activation failures
+        const originalConsoleError = console.error;
+        console.error = function(...args) {
+          const msg = args.join(" ");
+          if (
+            msg.includes("ApiNotActivatedMapError") ||
+            msg.includes("api-not-activated-map-error") ||
+            msg.includes("Google Maps JavaScript API error") ||
+            msg.includes("gm_authFailure") ||
+            msg.includes("google.maps")
+          ) {
+            console.warn("[Intercepted & Soft-Handled Map Activation Alert]:", ...args);
+            // Notify react app to go to sandbox mode instantly
+            window.dispatchEvent(new CustomEvent("gmaps_failover_triggered"));
+            return;
+          }
+          originalConsoleError.apply(console, args);
+        };
+
+        window.addEventListener("error", function(e) {
+          if (e.message && (
+            e.message.includes("ApiNotActivatedMapError") ||
+            e.message.includes("Google Maps") ||
+            e.message.includes("gm_authFailure") ||
+            e.message.includes("google.maps")
+          )) {
+            console.warn("[Intercepted Global Map Error]:", e.message);
+            window.dispatchEvent(new CustomEvent("gmaps_failover_triggered"));
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }, true);
+
+        window.addEventListener("unhandledrejection", function(e) {
+          const msg = e.reason && e.reason.message;
+          if (msg && (
+            msg.includes("ApiNotActivatedMapError") ||
+            msg.includes("Google Maps") ||
+            msg.includes("gm_authFailure") ||
+            msg.includes("google.maps")
+          )) {
+            console.warn("[Intercepted Promise rejection Map Error]:", msg);
+            window.dispatchEvent(new CustomEvent("gmaps_failover_triggered"));
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }, true);
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
