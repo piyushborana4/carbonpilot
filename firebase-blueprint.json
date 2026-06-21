@@ -116,6 +116,30 @@
         "timestamp": { "type": "string", "format": "date-time" }
       },
       "required": ["scanId", "userId", "estimatedCO2", "timestamp"]
+    },
+    "PlanetarySimulation": {
+      "title": "PlanetarySimulation",
+      "description": "User's customized planetary simulation sandbox and Committed Action Blueprint",
+      "type": "object",
+      "properties": {
+        "simulationId": { "type": "string" },
+        "userId": { "type": "string" },
+        "choices": {
+          "type": "object",
+          "properties": {
+            "commutingMode": { "type": "string" },
+            "dietStyle": { "type": "string" },
+            "homeEnergyGrid": { "type": "string" },
+            "consumptionWaste": { "type": "string" }
+          }
+        },
+        "tenYearEmissionsBAU": { "type": "array" },
+        "tenYearEmissionsGreen": { "type": "array" },
+        "personalizedRecommendations": { "type": "array" },
+        "verdictString": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["simulationId", "userId", "choices", "verdictString", "timestamp"]
     }
   },
   "firestore": {
@@ -138,6 +162,10 @@
     "users/{userId}/receipts/{receiptId}": {
       "schema": "ReceiptScan",
       "description": "Scanned carbon receipts"
+    },
+    "users/{userId}/simulations/{simulationId}": {
+      "schema": "PlanetarySimulation",
+      "description": "Custom 10-year environmental forecasting simulations and active commitments"
     },
     "family_groups/{groupId}": {
       "schema": "FamilyGroup",

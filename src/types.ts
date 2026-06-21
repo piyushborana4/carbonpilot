@@ -122,3 +122,25 @@ export interface SustainabilityReport {
   }[];
   cheeringCloser: string;
 }
+
+export interface PlanetarySimulation {
+  simulationId: string;
+  userId: string;
+  choices: {
+    commutingMode: string;
+    dietStyle: string;
+    homeEnergyGrid: string;
+    consumptionWaste: string;
+  };
+  tenYearEmissionsBAU: { year: number; co2: number }[];
+  tenYearEmissionsGreen: { year: number; co2: number }[];
+  personalizedRecommendations: {
+    title: string;
+    impact: string;
+    difficulty: string;
+    action: string;
+  }[];
+  verdictString: string;
+  timestamp: string;
+}
+

@@ -13,11 +13,12 @@ const ReceiptAnalyzer = lazy(() => import("./components/ReceiptAnalyzer"));
 const WeeklyChallenges = lazy(() => import("./components/WeeklyChallenges"));
 const FamilyDashboard = lazy(() => import("./components/FamilyDashboard"));
 const SustainabilityReports = lazy(() => import("./components/SustainabilityReports"));
+const PlanetarySandbox = lazy(() => import("./components/PlanetarySandbox"));
 
 import { useUserProfile } from "./hooks/useUserProfile";
 
 // Icons 
-import { Leaf, LogOut, LayoutDashboard, Calculator, Bot, Compass, FileSearch, HelpCircle, Users, FileBarChart, Loader2, Award, Sun, Moon } from "lucide-react";
+import { Leaf, LogOut, LayoutDashboard, Calculator, Bot, Compass, FileSearch, HelpCircle, Users, FileBarChart, Loader2, Award, Sun, Moon, Globe } from "lucide-react";
 
 export default function App() {
   const {
@@ -261,6 +262,7 @@ export default function App() {
           <nav className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-visible gap-1.5 pb-2 lg:pb-0 scrollbar-none">
             {[
               { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+              { id: "sandbox", label: "Earth Sandbox", icon: Globe },
               { id: "calculator", label: "Calculator", icon: Calculator },
               { id: "coach", label: "Climate Coach", icon: Bot },
               { id: "predict", label: "Predictions", icon: FileSearch },
@@ -361,6 +363,13 @@ export default function App() {
                 logs={logs}
                 profile={profile}
                 challengesCompletedCount={completedChallengesCount}
+              />
+            )}
+
+            {activeTab === "sandbox" && (
+              <PlanetarySandbox
+                userId={user.uid}
+                onLogAdded={handleLogAdded}
               />
             )}
           </Suspense>

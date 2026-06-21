@@ -70,6 +70,12 @@ service cloud.firestore {
              isNum(data.estimatedCO2);
     }
 
+    function isValidPlanetarySimulation(data) {
+      return data.simulationId is string && data.simulationId.size() <= 128 &&
+             data.userId is string && data.userId == request.auth.uid &&
+             data.verdictString is string && data.verdictString.size() <= 10000;
+    }
+
     // --- Path Rules ---
 
     // USERS COLLECTION
@@ -119,6 +125,17 @@ service cloud.firestore {
         allow create: if isOwner(userId) && isValidId(receiptId) && isValidReceiptScan(incoming());
         allow update: if false; // Scanning matches are immutable
         allow delete: if isOwner(userId) && isValidId(receiptId);
+      }
+
+      // Subcollection: Planetary Simulations
+      match /simulations/{simulationId} {
+        allow get: if isOwner(userId) && isValidId(simulationId);
+        allow list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(simulationId) && isValidPlanetarySimulation(incoming());
+        allow update: if isOwner(userId) && isValidId(simulationId) && isValidPlanetarySimulation(incoming()) &&
+                      incoming().simulationId == existing().simulationId &&
+                      incoming().userId == existing().userId;
+        allow delete: if isOwner(userId) && isValidId(simulationId);
       }
     }
 
