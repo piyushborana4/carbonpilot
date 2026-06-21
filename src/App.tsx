@@ -1,32 +1,38 @@
-import React, { useState, useEffect } from "react";
-import { UserProfile, FootprintLog } from "./types";
-import { auth, db, signInWithGoogle, logOut, validateFirestoreConnection, handleFirestoreError, OperationType } from "./firebase";
-import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { doc, getDoc, setDoc, collection, query, orderBy, onSnapshot } from "firebase/firestore";
+import React, { useState, useEffect, Suspense, lazy } from "react";
+import { auth, db, signInWithGoogle, logOut, validateFirestoreConnection } from "./firebase";
+import { doc, setDoc } from "firebase/firestore";
 import { WEEKLY_CHALLENGES } from "./challengesData";
 
-// Tabs & components
-import DashboardTab from "./components/DashboardTab";
-import CarbonCalculator from "./components/CarbonCalculator";
-import ClimateCoach from "./components/ClimateCoach";
-import PredictionEngine from "./components/PredictionEngine";
-import EcoRoute from "./components/EcoRoute";
-import ReceiptAnalyzer from "./components/ReceiptAnalyzer";
-import WeeklyChallenges from "./components/WeeklyChallenges";
-import FamilyDashboard from "./components/FamilyDashboard";
-import SustainabilityReports from "./components/SustainabilityReports";
+// Lazy-loaded Tabs & components for maximum client efficiency & code-splitting
+const DashboardTab = lazy(() => import("./components/DashboardTab"));
+const CarbonCalculator = lazy(() => import("./components/CarbonCalculator"));
+const ClimateCoach = lazy(() => import("./components/ClimateCoach"));
+const PredictionEngine = lazy(() => import("./components/PredictionEngine"));
+const EcoRoute = lazy(() => import("./components/EcoRoute"));
+const ReceiptAnalyzer = lazy(() => import("./components/ReceiptAnalyzer"));
+const WeeklyChallenges = lazy(() => import("./components/WeeklyChallenges"));
+const FamilyDashboard = lazy(() => import("./components/FamilyDashboard"));
+const SustainabilityReports = lazy(() => import("./components/SustainabilityReports"));
+
+import { useUserProfile } from "./hooks/useUserProfile";
 
 // Icons 
 import { Leaf, LogOut, LayoutDashboard, Calculator, Bot, Compass, FileSearch, HelpCircle, Users, FileBarChart, Loader2, Award, Sun, Moon } from "lucide-react";
 
 export default function App() {
-  const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [logs, setLogs] = useState<FootprintLog[]>([]);
-  const [completedChallengesCount, setCompletedChallengesCount] = useState(0);
+  const {
+    user,
+    profile,
+    logs,
+    completedChallengesCount,
+    authLoading,
+    profileLoading,
+    syncUserProfile,
+    handleLogAdded,
+    handleLogDeleted,
+    handlePointsAwarded,
+  } = useUserProfile();
 
-  const [authLoading, setAuthLoading] = useState(true);
-  const [profileLoading, setProfileLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("dashboard");
 
   // Local theme state initialized from localStorage
@@ -65,9 +71,6 @@ export default function App() {
       const userRef = doc(db, "users", user.uid);
       try {
         await setDoc(userRef, { theme: nextTheme }, { merge: true });
-        if (profile) {
-          setProfile({ ...profile, theme: nextTheme });
-        }
       } catch (err) {
         console.error("Failed to save theme choice to Firestore:", err);
       }
@@ -78,147 +81,6 @@ export default function App() {
   useEffect(() => {
     validateFirestoreConnection();
   }, []);
-
-  // Monitor Authentication state
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      setAuthLoading(true);
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        await syncUserProfile(firebaseUser);
-      } else {
-        setUser(null);
-        setProfile(null);
-        setLogs([]);
-        setCompletedChallengesCount(0);
-      }
-      setAuthLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Listen to standard emissions history subcollection for this user: users/{userId}/footprint_logs/{logId}
-  useEffect(() => {
-    if (!user) return;
-
-    const path = `users/${user.uid}/footprint_logs`;
-    const q = query(collection(db, "users", user.uid, "footprint_logs"), orderBy("timestamp", "desc"));
-    
-    // Set up snapshot listener
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: FootprintLog[] = [];
-        snapshot.forEach((doc) => {
-          list.push(doc.data() as FootprintLog);
-        });
-        setLogs(list);
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, path);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user]);
-
-  // Read challenges completions to calculate exact stats count
-  useEffect(() => {
-    if (!user) return;
-
-    const runCount = async () => {
-      let count = 0;
-      for (const ch of WEEKLY_CHALLENGES) {
-        const ref = doc(db, "challenges", ch.challengeId, "completions", user.uid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          count += 1;
-        }
-      }
-      setCompletedChallengesCount(count);
-    };
-
-    runCount();
-  }, [user, profile?.points]);
-
-  const syncUserProfile = async (firebaseUser: FirebaseUser) => {
-    setProfileLoading(true);
-    const userRef = doc(db, "users", firebaseUser.uid);
-    const targetPath = `users/${firebaseUser.uid}`;
-
-    try {
-      const snap = await getDoc(userRef);
-
-      if (snap.exists()) {
-        setProfile(snap.data() as UserProfile);
-      } else {
-        // Core Auto Onboarding Sequence: Instantiate default user options
-        const defaultProfile: UserProfile = {
-          userId: firebaseUser.uid,
-          displayName: firebaseUser.displayName || "Pilot Traveler",
-          email: firebaseUser.email || "",
-          points: 0,
-          currentFootprint: Number((4.5 + Math.random() * 4).toFixed(2)), // Random initial footprint tons
-          hasOnboarded: true,
-          theme: "light",
-          language: "en",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        await setDoc(userRef, defaultProfile);
-        setProfile(defaultProfile);
-      }
-    } catch (err: any) {
-      handleFirestoreError(err, OperationType.GET, targetPath);
-    } finally {
-      setProfileLoading(false);
-    }
-  };
-
-  const handleLogAdded = (newLog: FootprintLog) => {
-    // Optimistic immediate update to local state array (avoiding duplicates from real-time snapshot listener)
-    setLogs((prev) => {
-      if (prev.some((log) => log.logId === newLog.logId)) {
-        return prev;
-      }
-      return [newLog, ...prev];
-    });
-    
-    // Substantially reduce the profile current annual footprint in state
-    if (profile) {
-      const savedTons = newLog.co2e / 1000;
-      const updatedProfile = {
-        ...profile,
-        currentFootprint: Math.max(0, profile.currentFootprint - savedTons),
-      };
-      setProfile(updatedProfile);
-    }
-  };
-
-  const handlePointsAwarded = (pointsClaimed: number, co2SavedKg: number) => {
-    if (profile) {
-      const offsetTons = co2SavedKg / 1000;
-      setProfile({
-        ...profile,
-        points: profile.points + pointsClaimed,
-        currentFootprint: Math.max(0, profile.currentFootprint - offsetTons),
-      });
-      setCompletedChallengesCount((p) => p + 1);
-    }
-  };
-
-  const handleLogDeleted = (deletedLogId: string, deletedCO2e: number) => {
-    setLogs((prev) => prev.filter((l) => l.logId !== deletedLogId));
-    if (profile) {
-      const footprintRevertedTons = deletedCO2e / 1000;
-      setProfile({
-        ...profile,
-        currentFootprint: profile.currentFootprint + footprintRevertedTons,
-      });
-    }
-  };
 
   if (authLoading) {
     return (
@@ -427,72 +289,81 @@ export default function App() {
 
         {/* Dynamic Display Target (Desktop: Span 9) */}
         <main className="lg:col-span-9 space-y-6">
-          {activeTab === "dashboard" && (
-            <DashboardTab
-              userId={user.uid}
-              profile={profile}
-              logs={logs}
-              completedChallengesCount={completedChallengesCount}
-              onLogDeleted={handleLogDeleted}
-            />
-          )}
+          <Suspense
+            fallback={
+              <div className="flex flex-col items-center justify-center py-16 bg-bg-card border border-border-brand rounded-[32px] theme-transition">
+                <Loader2 className="w-8 h-8 text-brand-primary animate-spin mb-3" />
+                <span className="text-xs font-semibold text-text-secondary">Loading Climate Workspace...</span>
+              </div>
+            }
+          >
+            {activeTab === "dashboard" && (
+              <DashboardTab
+                userId={user.uid}
+                profile={profile}
+                logs={logs}
+                completedChallengesCount={completedChallengesCount}
+                onLogDeleted={handleLogDeleted}
+              />
+            )}
 
-          {activeTab === "calculator" && (
-            <CarbonCalculator
-              userId={user.uid}
-              onLogAdded={handleLogAdded}
-            />
-          )}
+            {activeTab === "calculator" && (
+              <CarbonCalculator
+                userId={user.uid}
+                onLogAdded={handleLogAdded}
+              />
+            )}
 
-          {activeTab === "coach" && (
-            <ClimateCoach
-              userId={user.uid}
-            />
-          )}
+            {activeTab === "coach" && (
+              <ClimateCoach
+                userId={user.uid}
+              />
+            )}
 
-          {activeTab === "predict" && (
-            <PredictionEngine
-              logs={logs}
-              profile={profile}
-            />
-          )}
+            {activeTab === "predict" && (
+              <PredictionEngine
+                logs={logs}
+                profile={profile}
+              />
+            )}
 
-          {activeTab === "route" && (
-            <EcoRoute
-              userId={user.uid}
-              onAddLog={handleLogAdded}
-            />
-          )}
+            {activeTab === "route" && (
+              <EcoRoute
+                userId={user.uid}
+                onAddLog={handleLogAdded}
+              />
+            )}
 
-          {activeTab === "receipt" && (
-            <ReceiptAnalyzer
-              userId={user.uid}
-              onScanCompleted={() => syncUserProfile(user)}
-            />
-          )}
+            {activeTab === "receipt" && (
+              <ReceiptAnalyzer
+                userId={user.uid}
+                onScanCompleted={() => syncUserProfile(user)}
+              />
+            )}
 
-          {activeTab === "challenges" && (
-            <WeeklyChallenges
-              userId={user.uid}
-              userPoints={profile?.points || 0}
-              onPointsAwarded={handlePointsAwarded}
-            />
-          )}
+            {activeTab === "challenges" && (
+              <WeeklyChallenges
+                userId={user.uid}
+                userPoints={profile?.points || 0}
+                onPointsAwarded={handlePointsAwarded}
+              />
+            )}
 
-          {activeTab === "family" && (
-            <FamilyDashboard
-              userId={user.uid}
-              userProfile={profile}
-            />
-          )}
+            {activeTab === "family" && (
+              <FamilyDashboard
+                userId={user.uid}
+                userProfile={profile}
+              />
+            )}
 
-          {activeTab === "reports" && (
-            <SustainabilityReports
-              logs={logs}
-              profile={profile}
-              challengesCompletedCount={completedChallengesCount}
-            />
-          )}
+            {activeTab === "reports" && (
+              <SustainabilityReports
+                logs={logs}
+                profile={profile}
+                challengesCompletedCount={completedChallengesCount}
+              />
+            )}
+          </Suspense>
         </main>
 
       </div>

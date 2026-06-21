@@ -16,22 +16,21 @@ export default function WeeklyChallenges({ userId, userPoints, onPointsAwarded }
   const [loading, setLoading] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
 
-  // Fetch completions history for user from Firestore
+  // Fetch completions history for user from Firestore in parallel
   const fetchCompletions = async () => {
     if (!userId) return;
     setLoading(true);
     try {
+      const promises = WEEKLY_CHALLENGES.map((ch) =>
+        getDoc(doc(db, "challenges", ch.challengeId, "completions", userId))
+      );
+      const snaps = await Promise.all(promises);
       const completedList: string[] = [];
-      
-      // Let's iterate through standard challenge IDs and see if the user document exists at:
-      // challenges/{challengeId}/completions/{userId}
-      for (const ch of WEEKLY_CHALLENGES) {
-        const ref = doc(db, "challenges", ch.challengeId, "completions", userId);
-        const snap = await getDoc(ref);
+      snaps.forEach((snap, idx) => {
         if (snap.exists()) {
-          completedList.push(ch.challengeId);
+          completedList.push(WEEKLY_CHALLENGES[idx].challengeId);
         }
-      }
+      });
       setCompletedIds(completedList);
     } catch (e) {
       console.error("Error reading challenge completions catalog:", e);

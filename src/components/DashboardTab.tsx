@@ -15,14 +15,21 @@ interface DashboardTabProps {
 
 export default function DashboardTab({ userId, profile, logs, completedChallengesCount, onLogDeleted }: DashboardTabProps) {
   
-  const totalLogsCO2 = logs.reduce((sum, item) => sum + item.co2e, 0);
+  const totalLogsCO2 = React.useMemo(() => logs.reduce((sum, item) => sum + item.co2e, 0), [logs]);
 
-  // Divide logs by category for proportional visualization
-  const getProportionalOffset = (cat: string) => {
+  // Memoize division of logs by category for clean, O(1) proportional lookup during render
+  const proportions = React.useMemo(() => {
     const total = totalLogsCO2 || 1;
-    const catSum = logs.filter((l) => l.category === cat).reduce((sum, item) => sum + item.co2e, 0);
-    return Number(((catSum / total) * 100).toFixed(0));
-  };
+    const categories = ["transport", "energy", "food", "waste"];
+    const results: Record<string, number> = {};
+    categories.forEach((cat) => {
+      const catSum = logs
+        .filter((l) => l.category === cat)
+        .reduce((sum, item) => sum + item.co2e, 0);
+      results[cat] = Number(((catSum / total) * 100).toFixed(0));
+    });
+    return results;
+  }, [logs, totalLogsCO2]);
 
   const handleDeleteLog = async (log: FootprintLog) => {
     const targetPath = `users/${userId}/footprint_logs/${log.logId}`;
@@ -111,7 +118,7 @@ export default function DashboardTab({ userId, profile, logs, completedChallenge
               <div className="flex items-center justify-between">
                 <Car className="w-4 h-4 text-indigo-500" />
                 <span className="font-mono text-sm font-bold text-text-primary">
-                  {getProportionalOffset("transport")}%
+                  {proportions["transport"] || 0}%
                 </span>
               </div>
               <span className="text-2xs font-bold text-text-secondary uppercase tracking-widest block">
@@ -124,7 +131,7 @@ export default function DashboardTab({ userId, profile, logs, completedChallenge
               <div className="flex items-center justify-between">
                 <Zap className="w-4 h-4 text-amber-500" />
                 <span className="font-mono text-sm font-bold text-text-primary">
-                  {getProportionalOffset("energy")}%
+                  {proportions["energy"] || 0}%
                 </span>
               </div>
               <span className="text-2xs font-bold text-text-secondary uppercase tracking-widest block">
@@ -137,7 +144,7 @@ export default function DashboardTab({ userId, profile, logs, completedChallenge
               <div className="flex items-center justify-between">
                 <Flame className="w-4 h-4 text-orange-500" />
                 <span className="font-mono text-sm font-bold text-text-primary">
-                  {getProportionalOffset("food")}%
+                  {proportions["food"] || 0}%
                 </span>
               </div>
               <span className="text-2xs font-bold text-text-secondary uppercase tracking-widest block">
@@ -150,7 +157,7 @@ export default function DashboardTab({ userId, profile, logs, completedChallenge
               <div className="flex items-center justify-between">
                 <RefreshCw className="w-4 h-4 text-brand-primary" />
                 <span className="font-mono text-sm font-bold text-text-primary">
-                  {getProportionalOffset("waste")}%
+                  {proportions["waste"] || 0}%
                 </span>
               </div>
               <span className="text-2xs font-bold text-text-secondary uppercase tracking-widest block">

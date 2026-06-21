@@ -46,25 +46,26 @@ export default function FamilyDashboard({ userId, userProfile }: FamilyDashboard
           const gData = docSnap.data() as FamilyGroup;
           setGroup(gData);
 
-          // Get detailed profiles for all members in the group to display rankings
-          const profilesList: { name: string; footprint: number }[] = [];
-          for (const mId of gData.memberIds) {
-            try {
-              const uSnap = await getDoc(doc(db, "users", mId));
-              if (uSnap.exists()) {
+          // Get detailed profiles for all members in the group to display rankings in parallel
+          try {
+            const memberPromises = gData.memberIds.map((mId) => getDoc(doc(db, "users", mId)));
+            const snaps = await Promise.all(memberPromises);
+            const profilesList = snaps
+              .filter((uSnap) => uSnap.exists())
+              .map((uSnap) => {
                 const uData = uSnap.data() as UserProfile;
-                profilesList.push({
+                return {
                   name: uData.displayName || "Echo Partner",
                   footprint: uData.currentFootprint,
-                });
-              }
-            } catch (err) {
-              console.warn("Failed to fetch member detail:", err);
-            }
+                };
+              });
+
+            // Sort memberships by lowest footprint first (best eco standing!)
+            profilesList.sort((a, b) => a.footprint - b.footprint);
+            setMemberProfiles(profilesList);
+          } catch (err) {
+            console.warn("Failed to fetch member details in parallel:", err);
           }
-          // Sort memberships by lowest footprint first (best eco standing!)
-          profilesList.sort((a, b) => a.footprint - b.footprint);
-          setMemberProfiles(profilesList);
         } else {
           setGroup(null);
         }

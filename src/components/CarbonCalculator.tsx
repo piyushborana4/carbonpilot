@@ -4,6 +4,7 @@ import { db, handleFirestoreError, OperationType } from "../firebase";
 import { collection, doc, setDoc } from "firebase/firestore";
 import { Leaf, Car, Zap, Flame, RefreshCw, PlusCircle, AlertCircle, CheckCircle } from "lucide-react";
 import { motion } from "motion/react";
+import { calculateCO2 } from "../utils/carbon";
 
 interface CarbonCalculatorProps {
   userId: string;
@@ -26,52 +27,10 @@ export default function CarbonCalculator({ userId, onLogAdded, lang = "en" }: Ca
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Computed CO2 coefficients (kg CO2e per unit)
-  const calculateCO2 = (): number => {
-    switch (category) {
-      case "transport":
-        if (subCategory === "driving") {
-          const factor = carFuelType === "petrol" ? 0.18 :
-                         carFuelType === "diesel" ? 0.17 :
-                         carFuelType === "hybrid" ? 0.10 : 0.04;
-          return Number((amount * factor).toFixed(2));
-        } else if (subCategory === "transit") {
-          return Number((amount * 0.05).toFixed(2)); // public transport
-        } else if (subCategory === "flight") {
-          return Number((flightHours * 110).toFixed(2)); // 110 kg CO2 per flight hour
-        }
-        return amount * 0.15;
-
-      case "energy":
-        if (subCategory === "electricity") {
-          const factor = electricitySource === "grid" ? 0.45 : 0.05; // 0.45kg per kWh vs renewable
-          return Number((amount * factor).toFixed(2));
-        } else if (subCategory === "gas") {
-          return Number((amount * 2.0).toFixed(2)); // 2.0kg per m3/unit
-        }
-        return amount * 1.5;
-
-      case "food":
-        if (subCategory === "diet") {
-          // amount represents days of following this diet
-          // daily emissions: vegan: ~3.5kg, vegetarian: ~4.5kg, low-meat: ~6.0kg, heavy-meat: ~9.5kg
-          const factor = amount === 1 ? 3.5 : amount === 2 ? 4.5 : amount === 3 ? 6.0 : 9.5;
-          return Number((1 * factor).toFixed(2)); // flat single day or meals
-        }
-        return amount * 1.2;
-
-      case "waste":
-        if (subCategory === "general") {
-          return Number((amount * 0.8).toFixed(2)); // ~0.8kg per liter/bag of non-recycled waste
-        } else if (subCategory === "recycled") {
-          return Number((amount * 0.1).toFixed(2));
-        }
-        return amount * 0.5;
-
-      default:
-        return 0;
-    }
-  };
+  // Computed CO2 coefficients (kg CO2e per unit) memoized for ultimate rendering speed and cached calculation efficacy
+  const calculatedCO2 = React.useMemo((): number => {
+    return calculateCO2(category, subCategory, amount, carFuelType, flightHours, electricitySource);
+  }, [category, subCategory, amount, carFuelType, flightHours, electricitySource]);
 
   const getUnit = (): string => {
     if (category === "transport") {
@@ -92,7 +51,6 @@ export default function CarbonCalculator({ userId, onLogAdded, lang = "en" }: Ca
     setError(null);
     setSuccess(false);
 
-    const calculatedCO2 = calculateCO2();
     if (calculatedCO2 <= 0) {
       setError("Please input a valid quantity of activities.");
       setSaving(false);
@@ -364,7 +322,7 @@ export default function CarbonCalculator({ userId, onLogAdded, lang = "en" }: Ca
             </span>
           </div>
           <span className="font-mono text-xl font-bold text-brand-primary">
-            {calculateCO2()} kg CO₂e
+            {calculatedCO2} kg CO₂e
           </span>
         </div>
 
